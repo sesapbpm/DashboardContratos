@@ -372,8 +372,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         /**
          * Busca faturas do contrato com suporte a sessionStorage e fallback de proxies.
+         * Se notas_fiscais já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
          */
         async function fetchFaturas(contrato) {
+            // Dados pré-carregados pelo workflow do GitHub Actions — sem chamada à API
+            if (contrato && Array.isArray(contrato.notas_fiscais)) {
+                return;
+            }
+
             if (!contrato || !contrato.links || !contrato.links.faturas) {
                 contrato.notas_fiscais = [];
                 return;
@@ -403,8 +409,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         /**
          * Busca histórico e termos aditivos do contrato com sessionStorage e fallback.
+         * Se aditivos já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
          */
         async function fetchAditivos(contrato) {
+            // Dados pré-carregados pelo workflow do GitHub Actions — sem chamada à API
+            if (contrato && Array.isArray(contrato.aditivos)) {
+                // Garante num_aditivos sincronizado
+                contrato.num_aditivos = contrato.aditivos.length;
+                return;
+            }
+
             if (!contrato || !contrato.links || !contrato.links.historico) {
                 contrato.aditivos = [];
                 contrato.num_aditivos = 0;
@@ -482,12 +496,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 populateYearDropdown(allContracts);
 
-                // Renderiza o esqueleto inicial e aplica os filtros imediatamente com base local
+                // Verifica se os dados de faturas/aditivos já estão pré-carregados no data.js
+                // (gerado pelo GitHub Actions — sem necessidade de chamadas à API com CORS)
+                const hasPreloadedData = allContracts.length > 0 &&
+                    Array.isArray(allContracts[0].notas_fiscais) &&
+                    Array.isArray(allContracts[0].aditivos);
+
+                if (hasPreloadedData) {
+                    // Dados já enriquecidos — renderiza imediatamente
+                    showToast('Faturas e aditivos carregados diretamente do data.js (pré-processado).', 'success', 'Dados Prontos', 3000);
+                    applyFilters();
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    return;
+                }
+
+                // Fallback: dados não estão pré-carregados — tenta buscar via API/proxy
                 renderTableSkeleton(6);
                 applyFilters();
                 if (loadingSpinner) loadingSpinner.style.display = 'none';
 
-                // Verifica se dados já estavam em cache
+                // Verifica se dados já estavam em cache de sessão
                 const hasCachedFaturas = sessionStorage.getItem(`sesap_faturas_${allContracts[0]?.id}`);
                 if (hasCachedFaturas) {
                     showToast('Dados de faturas carregados instantaneamente do cache local.', 'info', 'Cache Ativo', 3000);
@@ -500,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     fetchTasks.push(() => fetchAditivos(c));
                 });
 
-                // Executa em fila controlada (5 requisições concorrentes)
+                // Executa em fila controlada (6 requisições concorrentes)
                 await runWithConcurrency(fetchTasks, 6);
 
                 // Recalcula KPIs e atualiza tabelas/gráficos com faturas e aditivos carregados
