@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,37 +8,43 @@
     <meta name="description" content="Dashboard interativo para visualização de dados de contratos governamentais.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="logo-container" style="justify-content: center; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color);">
-                <img src="logo.png" alt="DIMP-SESAP" style="max-width: 100%; height: auto; max-height: 140px; object-fit: contain;">
+            <div class="logo-container"
+                style="justify-content: center; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color);">
+                <img src="logo.png" alt="DIMP-SESAP"
+                    style="max-width: 100%; height: auto; max-height: 140px; object-fit: contain;">
             </div>
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-view="visao-geral">
                     <i data-lucide="layout-dashboard"></i>
-                    Visão Geral
+                    Resumo Geral
                 </a>
                 <a href="#" class="nav-item" data-view="contratos">
                     <i data-lucide="file-text"></i>
-                    Contratos
+                    Lista de Contratos
                 </a>
                 <a href="#" class="nav-item" data-view="valores">
                     <i data-lucide="bar-chart-3"></i>
-                    Valores Globais
+                    Maiores Fornecedores
                 </a>
                 <a href="#" class="nav-item" data-view="vencer-30">
                     <i data-lucide="alert-circle"></i>
-                    A Vencer
+                    Alertas e Prazos
                 </a>
             </nav>
-            <div class="sidebar-footer" style="margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+            <div class="sidebar-footer"
+                style="margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
                 <div class="theme-toggle" id="theme-toggle">
                     <i data-lucide="moon"></i>
                     <span>Alternar Tema</span>
@@ -63,7 +70,7 @@
                             <i data-lucide="file-check-2"></i>
                         </div>
                         <div class="kpi-details">
-                            <h3>Total de Contratos</h3>
+                            <h3>Contratos Cadastrados</h3>
                             <p class="kpi-value" id="kpi-total-contratos">0</p>
                         </div>
                     </div>
@@ -72,8 +79,17 @@
                             <i data-lucide="dollar-sign"></i>
                         </div>
                         <div class="kpi-details">
-                            <h3>Valor Total Global</h3>
+                            <h3>Histórico Total Contratado</h3>
                             <p class="kpi-value" id="kpi-valor-total">R$ 0,00</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card glass clickable-card" id="card-saldo-ativo">
+                        <div class="kpi-icon-wrapper" style="background: rgba(14, 165, 233, 0.15); color: #0ea5e9;">
+                            <i data-lucide="wallet"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <h3>Orçamento Atual em Execução</h3>
+                            <p class="kpi-value" id="kpi-saldo-ativo">R$ 0,00</p>
                         </div>
                     </div>
                     <div class="kpi-card glass clickable-card" id="card-vencer-30">
@@ -81,13 +97,16 @@
                             <i data-lucide="clock"></i>
                         </div>
                         <div class="kpi-details">
-                            <h3>A Vencer em 30 Dias</h3>
+                            <h3>Contratos Vencendo em Breve</h3>
                             <p class="kpi-value" id="kpi-vencer-30-val">0</p>
                         </div>
                     </div>
-                    <div class="kpi-card glass" style="justify-content: center; flex-direction: column; align-items: flex-start; gap: 0.5rem;">
-                        <h3 style="font-size: 0.875rem; color: var(--text-secondary); font-weight: 500;">Filtrar por Ano</h3>
-                        <select id="year-filter" class="search-input" style="width: 100%; font-weight: bold; background: var(--bg-primary); padding: 0.5rem;">
+                    <div class="kpi-card glass"
+                        style="justify-content: center; flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                        <h3 style="font-size: 0.875rem; color: var(--text-secondary); font-weight: 500;">Filtrar por Ano
+                        </h3>
+                        <select id="year-filter" class="search-input"
+                            style="width: 100%; font-weight: bold; background: var(--bg-primary); padding: 0.5rem;">
                             <option value="all">Todos os Anos</option>
                         </select>
                     </div>
@@ -107,12 +126,67 @@
 
                 <!-- Valores Section -->
                 <section class="charts-section" id="section-valores" style="display: none; margin-bottom: 2.5rem;">
-                    <div class="chart-container glass" style="width: 100%; grid-column: 1 / -1;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                            <h3 class="section-title" style="margin-bottom: 0;">Valores dos Contratos</h3>
-                            <button id="btn-back-visao" class="search-input" style="width: auto; cursor: pointer; padding: 0.5rem 1rem;">Voltar para Visão Geral</button>
+                    <div class="chart-container glass"
+                        style="width: 100%; grid-column: 1 / -1; height: auto; min-height: 580px;">
+                        <div class="valores-header"
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                            <div>
+                                <h3 class="section-title" id="abc-chart-title" style="margin-bottom: 0.25rem;">Ranking
+                                    de Impacto Financeiro</h3>
+                                <p id="abc-chart-subtitle" style="font-size: 0.85rem; color: var(--text-secondary);">
+                                    Participação e impacto financeiro dos fornecedores no orçamento</p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                                <div class="abc-scope-wrapper">
+                                    <span
+                                        style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Escopo:</span>
+                                    <div class="scope-toggle-group">
+                                        <button type="button" class="scope-toggle-btn active" id="btn-scope-ativos"
+                                            data-scope="ativos">
+                                            <i data-lucide="check-circle-2" style="width: 14px; height: 14px;"></i>
+                                            Contratos Ativos
+                                        </button>
+                                        <button type="button" class="scope-toggle-btn" id="btn-scope-todos"
+                                            data-scope="todos">
+                                            <i data-lucide="layers" style="width: 14px; height: 14px;"></i> Todos
+                                            (Histórico)
+                                        </button>
+                                    </div>
+                                </div>
+                                <button id="btn-back-visao" class="search-input"
+                                    style="width: auto; cursor: pointer; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+                                    Voltar para o Resumo Geral
+                                </button>
+                            </div>
                         </div>
-                        <div style="position: relative; height: 500px; width: 100%;">
+
+                        <!-- ABC Summary Stats Bar -->
+                        <div class="abc-stats-bar" id="abc-stats-bar">
+                            <div class="abc-stat-chip">
+                                <span class="abc-chip-label">Base em Análise:</span>
+                                <span class="abc-chip-value" id="abc-base-label">Contratos Ativos</span>
+                            </div>
+                            <div class="abc-stat-chip">
+                                <span class="abc-chip-label">Volume Financeiro:</span>
+                                <span class="abc-chip-value" id="abc-total-analisado">R$ 0,00</span>
+                            </div>
+                            <div class="abc-stat-chip">
+                                <span class="abc-chip-label">Fornecedores:</span>
+                                <span class="abc-chip-value" id="abc-fornecedores-count">0 empresas</span>
+                            </div>
+                            <div class="abc-classes-legend">
+                                <span class="abc-badge badge-class-a"
+                                    title="Concentram a maior fatia do orçamento (até 80%)">Alto Impacto (Até
+                                    80%)</span>
+                                <span class="abc-badge badge-class-b"
+                                    title="Impacto intermediário no orçamento (80% a 95%)">Médio Impacto (15%)</span>
+                                <span class="abc-badge badge-class-c"
+                                    title="Menor volume financeiro (restante 5%)">Baixo Impacto (5%)</span>
+                            </div>
+                        </div>
+
+                        <div style="position: relative; height: 480px; width: 100%; margin-top: 1rem;">
                             <canvas id="valoresChart"></canvas>
                         </div>
                     </div>
@@ -120,32 +194,92 @@
 
                 <!-- Contracts Table -->
                 <section class="table-section glass" id="section-table">
+                    <!-- Risk Alert Panel for 'A Vencer' view -->
+                    <div id="risk-filter-panel" class="risk-filter-panel" style="display: none;">
+                        <div class="risk-panel-header">
+                            <div class="risk-panel-title">
+                                <i data-lucide="shield-alert" style="width: 20px; height: 20px; color: #f59e0b;"></i>
+                                <span>Gestão de Risco: Prazos e Limite Legal de Aditivos</span>
+                            </div>
+                        </div>
+                        <div class="risk-chips-container">
+                            <button type="button" class="risk-chip active" id="chip-risk-all" data-risk="all">
+                                <span class="risk-chip-dot dot-all"></span>
+                                Todos a Vencer (30d)
+                                <span class="risk-count" id="count-risk-all">0</span>
+                            </button>
+                            <button type="button" class="risk-chip chip-danger" id="chip-risk-critico"
+                                data-risk="critico">
+                                <span class="risk-chip-dot dot-danger"></span>
+                                Alerta Crítico (5/5 Aditivos)
+                                <span class="risk-count" id="count-risk-critico">0</span>
+                            </button>
+                            <button type="button" class="risk-chip chip-warning" id="chip-risk-atencao"
+                                data-risk="atencao">
+                                <span class="risk-chip-dot dot-warning"></span>
+                                Atenção (4 Aditivos)
+                                <span class="risk-count" id="count-risk-atencao">0</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
                         <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-                            <h3 class="section-title" style="margin-bottom: 0;">Lista de Contratos</h3>
-                            <button id="btn-back-visao-tabela" class="search-input" style="width: auto; cursor: pointer; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <h3 class="section-title" id="table-view-title" style="margin-bottom: 0;">Lista de Contratos
+                            </h3>
+                            <button id="btn-back-visao-tabela" class="search-input"
+                                style="width: auto; cursor: pointer; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
                                 <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
-                                Voltar para Visão Geral
+                                Voltar para o Resumo Geral
                             </button>
-                            <div class="update-info" style="font-size: 0.85rem; color: var(--text-secondary); opacity: 0.8; display: flex; align-items: center; gap: 0.5rem; background: var(--bg-secondary); padding: 0.4rem 0.8rem; border-radius: 20px; border: 1px solid var(--border-color);">
+                            <div class="update-info"
+                                style="font-size: 0.85rem; color: var(--text-secondary); opacity: 0.8; display: flex; align-items: center; gap: 0.5rem; background: var(--bg-secondary); padding: 0.4rem 0.8rem; border-radius: 20px; border: 1px solid var(--border-color);">
                                 <i data-lucide="clock" style="width: 14px; height: 14px;"></i>
                                 <span>Última atualização: <span id="last-update-date">Carregando...</span></span>
                             </div>
                         </div>
-                        <div class="table-actions" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <div class="table-actions"
+                            style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <select id="status-filter" class="search-input" style="width: 150px; padding: 0.5rem;">
                                 <option value="all">Todos (Status)</option>
                                 <option value="Ativo">Ativos</option>
                                 <option value="Vencido">Vencidos</option>
                                 <option value="A Vencer">A Vencer</option>
                             </select>
-                            <input type="text" id="search-input" placeholder="Buscar fornecedor ou objeto..." class="search-input">
-                            <button id="btn-reset-filter" class="search-input" style="width: auto; cursor: pointer; display: none; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444; padding: 0.5rem 1rem;">
+                            <input type="text" id="search-input" placeholder="Buscar fornecedor, objeto, contrato..."
+                                class="search-input">
+                            <button id="btn-reset-filter" class="search-input"
+                                style="width: auto; cursor: pointer; display: none; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444; padding: 0.5rem 1rem;">
                                 Limpar
                             </button>
+
+                            <!-- Export Buttons -->
+                            <div class="export-btn-group">
+                                <button id="btn-export-csv" class="btn-export"
+                                    title="Exportar dados filtrados para CSV (Excel)">
+                                    <i data-lucide="file-spreadsheet" style="width: 16px; height: 16px;"></i>
+                                    <span>CSV</span>
+                                </button>
+                                <button id="btn-print-report" class="btn-export"
+                                    title="Gerar relatório formatado ou imprimir em PDF">
+                                    <i data-lucide="printer" style="width: 16px; height: 16px;"></i>
+                                    <span>Relatório / PDF</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="table-responsive">
+
+                        <div class="dashboard-legend">
+                            <span class="legend-title"><i data-lucide="info" style="width:14px;height:14px;"></i>
+                                Legenda:</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-green"></span> Contrato ativo /
+                                0–3 aditivos (Regular)</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-yellow"></span> Vencimento &le;
+                                30 dias / 4 aditivos (Atenção)</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-red"></span> Contrato vencido /
+                                5 aditivos – limite legal atingido (Alerta Crítico)</span>
+                        </div>
                         <table class="contracts-table">
                             <thead>
                                 <tr>
@@ -154,14 +288,16 @@
                                     <th>Objeto</th>
                                     <th>Valor Global</th>
                                     <th>Vencimento</th>
+                                    <th>Aditivos</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="contracts-tbody">
-                                <!-- Populated by JS -->
+                                <!-- Populated by JS / Skeleton -->
                             </tbody>
                         </table>
                     </div>
+
                     <div id="loading-spinner" class="loading-spinner">
                         <i data-lucide="loader-2" class="spin"></i> Carregando dados...
                     </div>
@@ -169,7 +305,12 @@
             </div>
         </main>
     </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>
