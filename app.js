@@ -1,3 +1,24 @@
+// =======================================================
+// FUNÇÃO GLOBAL DE REQUISIÇÃO (Inserir no topo do app.js)
+// =======================================================
+async function requisitarDadosApi(urlOriginal) {
+    const targetUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlOriginal)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    try {
+        const resp = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeoutId);
+        if (!resp.ok) return null;
+        return await resp.json();
+    } catch (error) {
+        clearTimeout(timeoutId);
+        return null;
+    }
+}
 /**
  * Dashboard de Contratos SESAP-RN
  * Integração ComprasNet, Curva ABC, Gestão de Risco e Exportação de Relatórios
