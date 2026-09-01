@@ -333,23 +333,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         /**
          * Executa requisições com timeout e fallback em cascata por múltiplos proxies de CORS.
+         * Distingue erros de timeout (AbortError) dos demais e loga cada tentativa.
          */
         async function fetchWithProxyFallback(originalUrl, timeoutMs = 6500) {
             // Lista ordenada de estratégias (Direto -> Proxy 1 -> Proxy 2 -> Proxy 3)
             const endpoints = [
-                originalUrl,
-                `https://corsproxy.io/?${encodeURIComponent(originalUrl)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`,
-                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}`
+                { label: 'Direto', url: originalUrl },
+                { label: 'corsproxy.io', url: `https://corsproxy.io/?${encodeURIComponent(originalUrl)}` },
+                { label: 'allorigins.win', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}` },
+                { label: 'codetabs.com', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}` }
             ];
 
             let lastError = null;
 
-            for (const targetUrl of endpoints) {
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            for (const { label, url: targetUrl } of endpoints) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+                try {
                     const resp = await fetch(targetUrl, {
                         signal: controller.signal,
                         headers: { 'Accept': 'application/json' }
@@ -361,13 +362,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         const json = await resp.json();
                         return json;
                     }
+
+                    // HTTP error (4xx / 5xx) — tenta próximo proxy
+                    lastError = new Error(`HTTP ${resp.status} via ${label}`);
+                    console.warn(`[ComprasNet] ${label}: HTTP ${resp.status} — tentando próximo proxy.`);
+
                 } catch (err) {
+                    clearTimeout(timeoutId);
                     lastError = err;
-                    // Tenta o próximo proxy da lista
+
+                    if (err.name === 'AbortError') {
+                        console.warn(`[ComprasNet] ${label}: Timeout após ${timeoutMs}ms — tentando próximo proxy.`);
+                    } else {
+                        console.warn(`[ComprasNet] ${label}: ${err.message} — tentando próximo proxy.`);
+                    }
                 }
             }
 
-            throw lastError || new Error('Não foi possível obter dados da API após tentar todos os proxies');
+            const finalError = lastError || new Error('Não foi possível obter dados da API após tentar todos os proxies');
+            console.error('[ComprasNet] Todos os proxies esgotados para:', originalUrl, finalError);
+            throw finalError;
         }
 
         /**
@@ -403,6 +417,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 contrato.notas_fiscais = nfs;
                 sessionStorage.setItem(cacheKey, JSON.stringify(nfs));
             } catch (e) {
+                const motivo = e.name === 'AbortError' ? 'timeout' : e.message;
+                console.warn(`[Faturas] Falha ao buscar faturas do contrato ${contrato.id}: ${motivo}`);
                 contrato.notas_fiscais = [];
             }
         }
@@ -450,6 +466,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 contrato.num_aditivos = aditivos.length;
                 sessionStorage.setItem(cacheKey, JSON.stringify(aditivos));
             } catch (e) {
+                const motivo = e.name === 'AbortError' ? 'timeout' : e.message;
+                console.warn(`[Aditivos] Falha ao buscar histórico do contrato ${contrato.id}: ${motivo}`);
                 contrato.aditivos = [];
                 contrato.num_aditivos = 0;
             }
@@ -519,6 +537,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const hasCachedFaturas = sessionStorage.getItem(`sesap_faturas_${allContracts[0]?.id}`);
                 if (hasCachedFaturas) {
                     showToast('Dados de faturas carregados instantaneamente do cache local.', 'info', 'Cache Ativo', 3000);
+                } else {
+                    showToast(
+                        'Buscando faturas e aditivos via API ComprasNet. Isso pode levar alguns segundos...',
+                        'info', 'Conectando à API', 5000
+                    );
                 }
 
                 // Tarefas de busca em paralelo controlado
@@ -528,8 +551,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     fetchTasks.push(() => fetchAditivos(c));
                 });
 
-                // Executa em fila controlada (6 requisições concorrentes)
-                await runWithConcurrency(fetchTasks, 6);
+                try {
+                    // Executa em fila controlada (6 requisições concorrentes)
+                    await runWithConcurrency(fetchTasks, 6);
+                    showToast('Dados da API ComprasNet carregados com sucesso.', 'success', 'API OK', 3000);
+                } catch (apiErr) {
+                    // runWithConcurrency usa Promise.allSettled — erros individuais já tratados por contrato.
+                    // Este catch captura apenas falhas inesperadas no orquestrador.
+                    const motivo = apiErr && apiErr.name === 'AbortError'
+                        ? 'Timeout na conexão com a API ComprasNet.'
+                        : (apiErr ? apiErr.message : 'Falha desconhecida');
+                    console.error('[loadStaticData] Falha no carregamento via API:', apiErr);
+                    showToast(
+                        `Alguns dados podem estar incompletos. Motivo: ${motivo}`,
+                        'warning', 'Atenção: Falha Parcial na API'
+                    );
+                }
 
                 // Recalcula KPIs e atualiza tabelas/gráficos com faturas e aditivos carregados
                 applyFilters();
