@@ -332,56 +332,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // ==========================================
 
         /**
-         * Executa requisições com timeout e fallback em cascata por múltiplos proxies de CORS.
+         * Requisita dados da API com timeout e fallback em cascata por múltiplos proxies de CORS.
          * Distingue erros de timeout (AbortError) dos demais e loga cada tentativa.
          */
-        async function fetchWithProxyFallback(originalUrl, timeoutMs = 6500) {
-            // Lista ordenada de estratégias (Direto -> Proxy 1 -> Proxy 2 -> Proxy 3)
-            const endpoints = [
-                { label: 'Direto', url: originalUrl },
-                { label: 'codetabs.com', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}` },
-                { label: 'thingproxy', url: `https://thingproxy.freeboard.io/fetch/${originalUrl}` }
-            ];
 
-            let lastError = null;
-
-            for (const { label, url: targetUrl } of endpoints) {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-                try {
-                    const resp = await fetch(targetUrl, {
-                        signal: controller.signal,
-                        headers: { 'Accept': 'application/json' }
-                    });
-
-                    clearTimeout(timeoutId);
-
-                    if (resp.ok) {
-                        const json = await resp.json();
-                        return json;
-                    }
-
-                    // HTTP error (4xx / 5xx) — tenta próximo proxy
-                    lastError = new Error(`HTTP ${resp.status} via ${label}`);
-                    console.warn(`[ComprasNet] ${label}: HTTP ${resp.status} — tentando próximo proxy.`);
-
-                } catch (err) {
-                    clearTimeout(timeoutId);
-                    lastError = err;
-
-                    if (err.name === 'AbortError') {
-                        console.warn(`[ComprasNet] ${label}: Timeout após ${timeoutMs}ms — tentando próximo proxy.`);
-                    } else {
-                        console.warn(`[ComprasNet] ${label}: ${err.message} — tentando próximo proxy.`);
-                    }
-                }
-            }
-
-            const finalError = lastError || new Error('Não foi possível obter dados da API após tentar todos os proxies');
-            console.error('[ComprasNet] Todos os proxies esgotados para:', originalUrl, finalError);
-            throw finalError;
-        }
 
         /**
          * Busca faturas do contrato com suporte a sessionStorage e fallback de proxies.
@@ -411,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const json = await fetchWithProxyFallback(contrato.links.faturas);
+                const json = await requisitarDadosApi(contrato.links.faturas);
                 const nfs = Array.isArray(json) ? json : (json.data || json.items || []);
                 contrato.notas_fiscais = nfs;
                 sessionStorage.setItem(cacheKey, JSON.stringify(nfs));
@@ -422,6 +376,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        async function fetchWithProxyFallback(originalUrl, timeoutMs = 8000) {
+            // Apenas proxies operacionais (removidos 'Direto' e 'thingproxy')
+            const endpoints = [
+                { label: 'codetabs.com', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}` },
+                { label: 'allorigins.win', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}` }
+            ];
+
+            for (const { label, url: targetUrl } of endpoints) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+                try {
+                    const resp = await fetch(targetUrl, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (resp.ok) {
+                        return await resp.json();
+                    }
+                } catch (err) {
+                    clearTimeout(timeoutId);
+                }
+            }
+
+            // Se a API externa não responder, retorna array vazio para não travar o painel
+            return [];
+        }
         /**
          * Busca histórico e termos aditivos do contrato com sessionStorage e fallback.
          * Se aditivos já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
@@ -455,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const json = await fetchWithProxyFallback(contrato.links.historico);
+                const json = await requisitarDadosApi(contrato.links.historico);
                 const historico = Array.isArray(json) ? json : (json.data || json.items || []);
                 const aditivos = historico.filter(ev => {
                     const tipo = (ev.tipo || ev.tipo_evento || ev.descricao || '').toLowerCase();
