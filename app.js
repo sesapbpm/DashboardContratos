@@ -339,9 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Lista ordenada de estratégias (Direto -> Proxy 1 -> Proxy 2 -> Proxy 3)
             const endpoints = [
                 { label: 'Direto', url: originalUrl },
-                { label: 'corsproxy.io', url: `https://corsproxy.io/?${encodeURIComponent(originalUrl)}` },
-                { label: 'allorigins.win', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}` },
-                { label: 'codetabs.com', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}` }
+                { label: 'codetabs.com', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalUrl)}` },
+                { label: 'thingproxy', url: `https://thingproxy.freeboard.io/fetch/${originalUrl}` }
             ];
 
             let lastError = null;
