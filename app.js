@@ -341,6 +341,26 @@ document.addEventListener('DOMContentLoaded', () => {
          * Busca faturas do contrato com suporte a sessionStorage e fallback de proxies.
          * Se notas_fiscais já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
          */
+
+        async function requisitarDadosApi(urlOriginal) {
+            const targetUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlOriginal)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+            try {
+                const resp = await fetch(targetUrl, {
+                    signal: controller.signal,
+                    headers: { 'Accept': 'application/json' }
+                });
+                clearTimeout(timeoutId);
+                if (!resp.ok) return null;
+                return await resp.json();
+            } catch (error) {
+                clearTimeout(timeoutId);
+                return null;
+            }
+        }
+
         async function fetchFaturas(contrato) {
             // Dados pré-carregados pelo workflow do GitHub Actions — sem chamada à API
             if (contrato && Array.isArray(contrato.notas_fiscais)) {
