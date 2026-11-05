@@ -1,23 +1,32 @@
 // =======================================================
-// FUNÇÃO GLOBAL DE REQUISIÇÃO (Inserir no topo do app.js)
+// FUNÇÃO GLOBAL DE REQUISIÇÃO COM PROXY FALLBACK
 // =======================================================
-async function requisitarDadosApi(urlOriginal) {
-    const targetUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlOriginal)}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+async function requisitarDadosApi(urlOriginal, timeoutMs = 8000) {
+    if (!urlOriginal) return null;
 
-    try {
-        const resp = await fetch(targetUrl, {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
-        clearTimeout(timeoutId);
-        if (!resp.ok) return null;
-        return await resp.json();
-    } catch (error) {
-        clearTimeout(timeoutId);
-        return null;
+    const endpoints = [
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlOriginal)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(urlOriginal)}`
+    ];
+
+    for (const targetUrl of endpoints) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const resp = await fetch(targetUrl, {
+                signal: controller.signal,
+                headers: { 'Accept': 'application/json' }
+            });
+            clearTimeout(timeoutId);
+            if (resp.ok) {
+                return await resp.json();
+            }
+        } catch (error) {
+            clearTimeout(timeoutId);
+        }
     }
+    return null;
 }
 /**
  * Dashboard de Contratos SESAP-RN
@@ -363,25 +372,6 @@ document.addEventListener('DOMContentLoaded', () => {
          * Se notas_fiscais já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
          */
 
-        async function requisitarDadosApi(urlOriginal) {
-            const targetUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlOriginal)}`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-            try {
-                const resp = await fetch(targetUrl, {
-                    signal: controller.signal,
-                    headers: { 'Accept': 'application/json' }
-                });
-                clearTimeout(timeoutId);
-                if (!resp.ok) return null;
-                return await resp.json();
-            } catch (error) {
-                clearTimeout(timeoutId);
-                return null;
-            }
-        }
-
         async function fetchFaturas(contrato) {
             // Dados pré-carregados pelo workflow do GitHub Actions — sem chamada à API
             if (contrato && Array.isArray(contrato.notas_fiscais)) {
@@ -389,7 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (!contrato || !contrato.links || !contrato.links.faturas) {
-                contrato.notas_fiscais = [];
+                if (contrato) contrato.notas_fiscais = [];
                 return;
             }
 
@@ -406,14 +396,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                const json = await requisitarDadosApi(contrato.links.faturas);
-                const nfs = Array.isArray(json) ? json : (json.data || json.items || []);
-                contrato.notas_fiscais = nfs;
-                sessionStorage.setItem(cacheKey, JSON.stringify(nfs));
+                const resposta = await requisitarDadosApi(contrato.links.faturas);
+
+                // Tratamento seguro contra null/undefined com Optional Chaining
+                const nfs = Array.isArray(resposta)
+                    ? resposta
+                    : (resposta?.data || resposta?.items || []);
+
+                contrato.notas_fiscais = Array.isArray(nfs) ? nfs : [];
+
+                // Só armazena em cache de sessão se a resposta for válida
+                if (resposta) {
+                    sessionStorage.setItem(cacheKey, JSON.stringify(contrato.notas_fiscais));
+                }
             } catch (e) {
-                const motivo = e.name === 'AbortError' ? 'timeout' : e.message;
-                console.warn(`[Faturas] Falha ao buscar faturas do contrato ${contrato.id}: ${motivo}`);
-                contrato.notas_fiscais = [];
+                const motivo = e?.name === 'AbortError' ? 'timeout' : (e?.message || 'Erro desconhecido');
+                console.warn(`[Faturas] Falha ao buscar faturas do contrato ${contrato?.id}: ${motivo}`);
+                if (contrato) contrato.notas_fiscais = [];
             }
         }
 
@@ -443,55 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Se a API externa não responder, retorna array vazio para não travar o painel
             return [];
         }
-        /**
-         * Busca histórico e termos aditivos do contrato com sessionStorage e fallback.
-         * Se aditivos já estiver pré-carregado no data.js (pelo GitHub Actions), usa esses dados diretamente.
-         */
-        async function fetchAditivos(contrato) {
-            // Dados pré-carregados pelo workflow do GitHub Actions — sem chamada à API
-            if (contrato && Array.isArray(contrato.aditivos)) {
-                // Garante num_aditivos sincronizado
-                contrato.num_aditivos = contrato.aditivos.length;
-                return;
-            }
 
-            if (!contrato || !contrato.links || !contrato.links.historico) {
-                contrato.aditivos = [];
-                contrato.num_aditivos = 0;
-                return;
-            }
-
-            const cacheKey = `sesap_historico_${contrato.id}`;
-            const cached = sessionStorage.getItem(cacheKey);
-
-            if (cached) {
-                try {
-                    const aditivos = JSON.parse(cached);
-                    contrato.aditivos = aditivos;
-                    contrato.num_aditivos = aditivos.length;
-                    return;
-                } catch (e) {
-                    sessionStorage.removeItem(cacheKey);
-                }
-            }
-
-            try {
-                const json = await requisitarDadosApi(contrato.links.historico);
-                const historico = Array.isArray(json) ? json : (json.data || json.items || []);
-                const aditivos = historico.filter(ev => {
-                    const tipo = (ev.tipo || ev.tipo_evento || ev.descricao || '').toLowerCase();
-                    return tipo.includes('aditivo') || tipo.includes('acréscimo') || tipo.includes('prorrogacao') || tipo.includes('prorrogação');
-                });
-                contrato.aditivos = aditivos;
-                contrato.num_aditivos = aditivos.length;
-                sessionStorage.setItem(cacheKey, JSON.stringify(aditivos));
-            } catch (e) {
-                const motivo = e.name === 'AbortError' ? 'timeout' : e.message;
-                console.warn(`[Aditivos] Falha ao buscar histórico do contrato ${contrato.id}: ${motivo}`);
-                contrato.aditivos = [];
-                contrato.num_aditivos = 0;
-            }
-        }
 
         /**
          * Executa tarefas assíncronas em lotes para não sobrecarregar navegadores ou proxies.
@@ -506,11 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return results;
         }
 
-        function getAditivoInfo(numAditivos) {
-            if (numAditivos >= 5) return { classe: 'aditivo-critico', nivel: 'critico', cor: '#ef4444' };
-            if (numAditivos === 4) return { classe: 'aditivo-atencao', nivel: 'atencao', cor: '#f59e0b' };
-            return { classe: 'aditivo-normal', nivel: 'normal', cor: '#10b981' };
-        }
+
 
         function getSaldoContrato(contrato) {
             if (!contrato) return 0;
@@ -522,7 +469,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadStaticData() {
             if (typeof staticData !== 'undefined' && staticData.length > 0) {
-                allContracts = staticData;
+                // Deduplica registros por ID para evitar contagens duplicadas (equivalente a COUNT(DISTINCT ...) no backend)
+                const seenIds = new Set();
+                allContracts = staticData.filter(c => {
+                    if (!c || c.id === undefined || c.id === null) return true;
+                    const idKey = String(c.id);
+                    if (seenIds.has(idKey)) return false;
+                    seenIds.add(idKey);
+                    return true;
+                });
 
                 // Exibir data de atualização
                 const lastUpdateSpan = document.getElementById('last-update-date');
@@ -534,15 +489,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 populateYearDropdown(allContracts);
 
-                // Verifica se os dados de faturas/aditivos já estão pré-carregados no data.js
+                // Verifica se os dados de faturas já estão pré-carregados no data.js
                 // (gerado pelo GitHub Actions — sem necessidade de chamadas à API com CORS)
                 const hasPreloadedData = allContracts.length > 0 &&
-                    Array.isArray(allContracts[0].notas_fiscais) &&
-                    Array.isArray(allContracts[0].aditivos);
+                    Array.isArray(allContracts[0].notas_fiscais);
 
                 if (hasPreloadedData) {
                     // Dados já enriquecidos — renderiza imediatamente
-                    showToast('Faturas e aditivos carregados diretamente do data.js (pré-processado).', 'success', 'Dados Prontos', 3000);
+                    showToast('Faturas carregadas diretamente do data.js (pré-processado).', 'success', 'Dados Prontos', 3000);
                     applyFilters();
                     if (loadingSpinner) loadingSpinner.style.display = 'none';
                     return;
@@ -559,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast('Dados de faturas carregados instantaneamente do cache local.', 'info', 'Cache Ativo', 3000);
                 } else {
                     showToast(
-                        'Buscando faturas e aditivos via API ComprasNet. Isso pode levar alguns segundos...',
+                        'Buscando faturas via API ComprasNet. Isso pode levar alguns segundos...',
                         'info', 'Conectando à API', 5000
                     );
                 }
@@ -568,7 +522,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fetchTasks = [];
                 allContracts.forEach(c => {
                     fetchTasks.push(() => fetchFaturas(c));
-                    fetchTasks.push(() => fetchAditivos(c));
                 });
 
                 try {
@@ -602,6 +555,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function formatBRL(value) {
             return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        }
+
+        // Converte string de vigência (YYYY-MM-DD) para Date no final do dia (23:59:59 local),
+        // evitando que contratos válidos hoje sejam classificados erroneamente como vencidos
+        // por discrepância de horário/fuso UTC (UTC-3).
+        function parseDateLocal(dateStr) {
+            if (!dateStr) return null;
+            const clean = dateStr.split('T')[0];
+            const parts = clean.split('-');
+            if (parts.length === 3) {
+                return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 23, 59, 59, 999);
+            }
+            return new Date(dateStr);
         }
 
         function populateYearDropdown(data) {
@@ -646,22 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        if (chipRiskCritico) {
-            chipRiskCritico.addEventListener('click', () => {
-                currentRiskFilter = 'critico';
-                updateRiskChipsUI();
-                applyFilters();
-                showToast('Filtrando contratos com limite legal de 5 aditivos atingido.', 'warning', 'Risco Crítico');
-            });
-        }
 
-        if (chipRiskAtencao) {
-            chipRiskAtencao.addEventListener('click', () => {
-                currentRiskFilter = 'atencao';
-                updateRiskChipsUI();
-                applyFilters();
-            });
-        }
 
         // ==========================================
         // ESCOPO DA CURVA ABC (ATIVOS VS TODOS)
@@ -715,32 +666,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Contadores para o painel de risco
+            // Contador para o painel de risco (contratos vencendo em 30 dias)
             let totalVencendo30 = 0;
-            let totalCriticoAditivos = 0;
-            let totalAtencaoAditivos = 0;
 
             allContracts.forEach(c => {
-                let isVencendo = false;
                 if (c.vigencia_fim) {
-                    const endDate = new Date(c.vigencia_fim);
-                    if (endDate >= now) {
-                        const thirtyDaysFromNow = new Date();
+                    const endDate = parseDateLocal(c.vigencia_fim);
+                    if (endDate && endDate >= now) {
+                        const thirtyDaysFromNow = new Date(now);
                         thirtyDaysFromNow.setDate(now.getDate() + 30);
+                        thirtyDaysFromNow.setHours(23, 59, 59, 999);
                         if (endDate <= thirtyDaysFromNow) {
-                            isVencendo = true;
                             totalVencendo30++;
                         }
                     }
                 }
-                const numAd = c.num_aditivos || 0;
-                if (numAd >= 5) totalCriticoAditivos++;
-                if (numAd === 4) totalAtencaoAditivos++;
             });
 
             if (countRiskAll) countRiskAll.innerText = totalVencendo30;
-            if (countRiskCritico) countRiskCritico.innerText = totalCriticoAditivos;
-            if (countRiskAtencao) countRiskAtencao.innerText = totalAtencaoAditivos;
 
             const filtered = allContracts.filter(c => {
                 let yearMatch = true;
@@ -754,14 +697,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 let isVencido = false;
                 let isVencendo = false;
                 if (c.vigencia_fim) {
-                    const endDate = new Date(c.vigencia_fim);
-                    if (endDate < now) {
-                        isVencido = true;
-                    } else {
-                        const thirtyDaysFromNow = new Date();
-                        thirtyDaysFromNow.setDate(now.getDate() + 30);
-                        if (endDate <= thirtyDaysFromNow) {
-                            isVencendo = true;
+                    const endDate = parseDateLocal(c.vigencia_fim);
+                    if (endDate) {
+                        if (endDate < now) {
+                            isVencido = true;
+                        } else {
+                            const thirtyDaysFromNow = new Date(now);
+                            thirtyDaysFromNow.setDate(now.getDate() + 30);
+                            thirtyDaysFromNow.setHours(23, 59, 59, 999);
+                            if (endDate <= thirtyDaysFromNow) {
+                                isVencendo = true;
+                            }
                         }
                     }
                 }
@@ -772,11 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Filtro de risco específico da aba A Vencer
                 let riskMatch = true;
-                if (selectedStatus === 'A Vencer' || (riskFilterPanel && riskFilterPanel.style.display !== 'none')) {
-                    const numAd = c.num_aditivos || 0;
-                    if (currentRiskFilter === 'critico' && numAd < 5) riskMatch = false;
-                    if (currentRiskFilter === 'atencao' && numAd !== 4) riskMatch = false;
-                }
 
                 let searchMatch = true;
                 if (term.length > 0) {
@@ -821,8 +762,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let countVencidos = 0;
 
             const now = new Date();
-            const thirtyDaysFromNow = new Date();
+            const thirtyDaysFromNow = new Date(now);
             thirtyDaysFromNow.setDate(now.getDate() + 30);
+            thirtyDaysFromNow.setHours(23, 59, 59, 999);
 
             const vencimentoMap = {};
 
@@ -833,19 +775,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 let isVencido = false;
 
                 if (contrato.vigencia_fim) {
-                    const endDate = new Date(contrato.vigencia_fim);
+                    const endDate = parseDateLocal(contrato.vigencia_fim);
 
-                    if (endDate < now) {
+                    if (endDate && endDate < now) {
                         isVencido = true;
                         countVencidos++;
                     } else {
                         countAtivos++;
-                        if (endDate <= thirtyDaysFromNow) {
+                        if (endDate && endDate <= thirtyDaysFromNow) {
                             vencer30Dias++;
                         }
                     }
 
-                    const monthYear = String(endDate.getMonth() + 1).padStart(2, '0') + '/' + endDate.getFullYear();
+                    const cleanDate = contrato.vigencia_fim.split('T')[0];
+                    const parts = cleanDate.split('-');
+                    const monthYear = parts.length === 3 ? `${parts[1]}/${parts[0]}` : 'N/A';
                     vencimentoMap[monthYear] = (vencimentoMap[monthYear] || 0) + 1;
                 } else {
                     countAtivos++;
@@ -879,87 +823,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // ==========================================
-        // RENDERIZAÇÃO DOS DETALHES DE ADITIVOS E NOTAS
+        // RENDERIZAÇÃO DOS DETALHES FINANCEIROS
         // ==========================================
-        function renderAditivosBlock(c) {
-            const LIMITE = 5;
-            const numAditivos = c.num_aditivos || 0;
-            const adInfo = getAditivoInfo(numAditivos);
-            const barPercent = Math.min((numAditivos / LIMITE) * 100, 100);
-            const aditivos = c.aditivos || [];
-
-            let tabelaContent = '';
-            if (aditivos.length === 0) {
-                tabelaContent = `
-                    <div class="nf-empty-notice" style="margin-top:0.75rem;">
-                        Nenhum termo aditivo registrado no contratos.gov para este contrato.
-                    </div>
-                `;
-            } else {
-                let rows = '';
-                aditivos.forEach((ad, i) => {
-                    let dt = ad.data || ad.data_evento || ad.data_publicacao || '-';
-                    if (dt && dt.includes('-')) {
-                        const p = dt.split('T')[0].split('-');
-                        if (p.length === 3) dt = `${p[2]}/${p[1]}/${p[0]}`;
-                    }
-                    const tipo = ad.tipo || ad.tipo_evento || ad.descricao || `Aditivo ${i + 1}`;
-                    const valor = ad.valor ? formatBRL(parseFloat(ad.valor)) : '-';
-                    const obs = ad.observacao || ad.justificativa || '';
-                    rows += `
-                        <tr>
-                            <td style="text-align:center; font-weight:700; color:var(--text-secondary);">${i + 1}º</td>
-                            <td>${dt}</td>
-                            <td style="font-weight:600;">${tipo}</td>
-                            <td>${valor}</td>
-                            <td title="${obs}" style="color:var(--text-secondary); max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${obs || '-'}</td>
-                        </tr>
-                    `;
-                });
-                tabelaContent = `
-                    <div class="aditivos-table-wrapper">
-                        <table class="aditivos-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:3rem;">#</th>
-                                    <th>Data</th>
-                                    <th>Tipo de Alteração</th>
-                                    <th>Valor</th>
-                                    <th>Observação</th>
-                                </tr>
-                            </thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                `;
-            }
-
-            const alertaTexto = adInfo.nivel === 'critico'
-                ? '🔴 Limite legal de 5 aditivos atingido — Lei 14.133/21: Necessário encerramento ou novo processo licitatório.'
-                : adInfo.nivel === 'atencao'
-                    ? '🟡 Atenção: 4 aditivos concedidos. Apenas 1 prorrogação contratual restante.'
-                    : '';
-
-            return `
-                <div class="aditivos-section">
-                    <div class="aditivos-header">
-                        <div class="aditivos-title">
-                            <i data-lucide="file-plus-2" style="width:18px;height:18px;color:${adInfo.cor};"></i>
-                            <span>Termos Aditivos (${numAditivos}/${LIMITE})</span>
-                        </div>
-                        <span class="aditivo-badge ${adInfo.classe}">${numAditivos}/${LIMITE} aditivos</span>
-                    </div>
-                    <div class="aditivos-progress-bar-wrapper">
-                        <div class="aditivos-bar-track">
-                            <div class="aditivos-bar-fill ${adInfo.classe}" style="width:${barPercent}%;"></div>
-                        </div>
-                        <span class="aditivos-bar-label" style="color:${adInfo.cor};">${numAditivos}/${LIMITE}</span>
-                    </div>
-                    ${alertaTexto ? `<div style="font-size:0.8rem;font-weight:600;color:${adInfo.cor};margin-bottom:0.75rem;padding:0.5rem 0.75rem;background:rgba(0,0,0,0.04);border-radius:8px;border-left:3px solid ${adInfo.cor};">${alertaTexto}</div>` : ''}
-                    ${tabelaContent}
-                </div>
-            `;
-        }
 
         function renderContractFinanceBlock(c) {
             const valorGlobalNum = parseCurrencyBR(c.valor_global);
@@ -1050,7 +915,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        <td colspan="6" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                             <i data-lucide="inbox" style="width: 36px; height: 36px; margin-bottom: 0.5rem; opacity: 0.5;"></i>
                             <p>Nenhum contrato encontrado para os filtros selecionados.</p>
                         </td>
@@ -1075,29 +940,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 let statusText = c.situacao || 'Ativo';
 
                 if (c.vigencia_fim) {
-                    const dateParts = c.vigencia_fim.split('-');
+                    const cleanDate = c.vigencia_fim.split('T')[0];
+                    const dateParts = cleanDate.split('-');
                     if (dateParts.length === 3) {
                         dataVenc = dateParts[2] + '/' + dateParts[1] + '/' + dateParts[0];
 
-                        const endDate = new Date(c.vigencia_fim);
-                        if (endDate < now) {
+                        const endDate = parseDateLocal(c.vigencia_fim);
+                        if (endDate && endDate < now) {
                             statusText = 'Vencido';
-                            statusClass = '';
+                            statusClass = 'status-vencido';
                             tr.style.opacity = '0.65';
-                        } else if (endDate <= thirtyDaysFromNow) {
+                        } else if (endDate && endDate <= thirtyDaysFromNow) {
                             statusText = 'A Vencer';
                             statusClass = 'status-vencendo';
                         }
                     }
-                }
-
-                // Aditivos
-                const numAditivos = c.num_aditivos || 0;
-                const adInfo = getAditivoInfo(numAditivos);
-
-                // Destaque de Risco Crítico
-                if (numAditivos >= 5) {
-                    tr.classList.add('row-risk-critical');
                 }
 
                 tr.innerHTML = `
@@ -1106,11 +963,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="obj-cell" title="${c.objeto}">${c.objeto || '-'}</td>
                     <td>${valor}</td>
                     <td>${dataVenc}</td>
-                    <td style="text-align:center;">
-                        <span class="aditivo-badge ${adInfo.classe}" title="${numAditivos >= 5 ? 'Limite legal atingido' : ''}">
-                            ${numAditivos >= 5 ? '🚨 ' : ''}${numAditivos}/5
-                        </span>
-                    </td>
                     <td>
                         <div class="status-cell">
                             <span class="status-badge ${statusClass}">${statusText}</span>
@@ -1123,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 detailTr.classList.add('details-row');
                 detailTr.id = `details-${c.id || index}`;
                 detailTr.innerHTML = `
-                    <td colspan="7">
+                    <td colspan="6">
                         <div class="details-wrapper">
                             <div class="details-container">
                                 <div class="details-grid">
@@ -1152,7 +1004,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                         <span class="detail-value">${c.processo || 'N/A'}</span>
                                     </div>
                                 </div>
-                                ${renderAditivosBlock(c)}
                                 <div class="contract-finance-container">
                                     ${renderContractFinanceBlock(c)}
                                 </div>
@@ -1283,10 +1134,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 let isVencido = false;
                 let isVencendo = false;
                 if (c.vigencia_fim) {
-                    const endDate = new Date(c.vigencia_fim);
-                    if (endDate < now) {
+                    const endDate = parseDateLocal(c.vigencia_fim);
+                    if (endDate && endDate < now) {
                         isVencido = true;
-                    } else if (endDate <= thirtyDaysFromNow) {
+                    } else if (endDate && endDate <= thirtyDaysFromNow) {
                         isVencendo = true;
                     }
                 }
@@ -1297,11 +1148,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (selectedStatus === 'A Vencer' && !isVencendo) statusMatch = false;
 
                 let riskMatch = true;
-                if (selectedStatus === 'A Vencer' || (riskFilterPanel && riskFilterPanel.style.display !== 'none')) {
-                    const numAd = c.num_aditivos || 0;
-                    if (currentRiskFilter === 'critico' && numAd < 5) riskMatch = false;
-                    if (currentRiskFilter === 'atencao' && numAd !== 4) riskMatch = false;
-                }
 
                 let searchMatch = true;
                 if (term.length > 0) {
@@ -1333,7 +1179,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Valor Global (R$)',
                     'Total Faturado (R$)',
                     'Saldo Restante (R$)',
-                    'Nº Aditivos',
                     'Situação'
                 ];
 
@@ -1350,10 +1195,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     let situacaoCalculada = 'Ativo';
                     if (c.vigencia_fim) {
-                        const endDate = new Date(c.vigencia_fim);
-                        if (endDate < now) {
+                        const endDate = parseDateLocal(c.vigencia_fim);
+                        if (endDate && endDate < now) {
                             situacaoCalculada = 'Vencido';
-                        } else if (endDate <= thirtyDaysFromNow) {
+                        } else if (endDate && endDate <= thirtyDaysFromNow) {
                             situacaoCalculada = 'A Vencer';
                         } else {
                             situacaoCalculada = 'Ativo';
@@ -1372,7 +1217,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         `"${valorGlobal}"`,
                         `"${totalFaturado}"`,
                         `"${saldo}"`,
-                        `"${c.num_aditivos || 0}"`,
                         `"${situacaoCalculada}"`
                     ].join(';');
                 });
@@ -1574,8 +1418,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!c.valor_global) return;
 
                 if (isScopeAtivos && c.vigencia_fim) {
-                    const endDate = new Date(c.vigencia_fim);
-                    if (endDate < now) return;
+                    const endDate = parseDateLocal(c.vigencia_fim);
+                    if (endDate && endDate < now) return;
                 }
 
                 const nome = (c.fornecedor && c.fornecedor.nome) ? c.fornecedor.nome.trim() : 'Não informado';

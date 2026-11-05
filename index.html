@@ -199,7 +199,7 @@
                         <div class="risk-panel-header">
                             <div class="risk-panel-title">
                                 <i data-lucide="shield-alert" style="width: 20px; height: 20px; color: #f59e0b;"></i>
-                                <span>Gestão de Risco: Prazos e Limite Legal de Aditivos</span>
+                                <span>Alertas de Prazo: Contratos Vencendo em 30 Dias</span>
                             </div>
                         </div>
                         <div class="risk-chips-container">
@@ -207,18 +207,6 @@
                                 <span class="risk-chip-dot dot-all"></span>
                                 Todos a Vencer (30d)
                                 <span class="risk-count" id="count-risk-all">0</span>
-                            </button>
-                            <button type="button" class="risk-chip chip-danger" id="chip-risk-critico"
-                                data-risk="critico">
-                                <span class="risk-chip-dot dot-danger"></span>
-                                Alerta Crítico (5/5 Aditivos)
-                                <span class="risk-count" id="count-risk-critico">0</span>
-                            </button>
-                            <button type="button" class="risk-chip chip-warning" id="chip-risk-atencao"
-                                data-risk="atencao">
-                                <span class="risk-chip-dot dot-warning"></span>
-                                Atenção (4 Aditivos)
-                                <span class="risk-count" id="count-risk-atencao">0</span>
                             </button>
                         </div>
                     </div>
@@ -273,12 +261,10 @@
                         <div class="dashboard-legend">
                             <span class="legend-title"><i data-lucide="info" style="width:14px;height:14px;"></i>
                                 Legenda:</span>
-                            <span class="legend-item"><span class="legend-dot legend-dot-green"></span> Contrato ativo /
-                                0–3 aditivos (Regular)</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-green"></span> Contrato ativo</span>
                             <span class="legend-item"><span class="legend-dot legend-dot-yellow"></span> Vencimento &le;
-                                30 dias / 4 aditivos (Atenção)</span>
-                            <span class="legend-item"><span class="legend-dot legend-dot-red"></span> Contrato vencido /
-                                5 aditivos – limite legal atingido (Alerta Crítico)</span>
+                                30 dias (Atenção)</span>
+                            <span class="legend-item"><span class="legend-dot legend-dot-red"></span> Contrato vencido (Alerta)</span>
                         </div>
                         <table class="contracts-table">
                             <thead>
@@ -288,7 +274,6 @@
                                     <th>Objeto</th>
                                     <th>Valor Global</th>
                                     <th>Vencimento</th>
-                                    <th>Aditivos</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>

@@ -486,6 +486,11 @@ tr.expanded .expand-icon {
     color: #f59e0b;
 }
 
+.status-vencido {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
 .loading-spinner {
     display: flex;
     flex-direction: column;
